@@ -4,27 +4,35 @@ use pyo3::prelude::*;
 /// A Python module implemented in Rust.
 #[pymodule]
 mod pareto_dp {
+    use pyo3::exceptions::PyValueError;
     use pyo3::prelude::*;
 
     use crate::pareto;
 
-    // The way to get result.design_vectors and result.target_vectors in Python
     #[pyclass]
     pub struct ParetoFrontSolution {
         #[pyo3(get)]
-        pub design_vectors: Vec<u32>,
+        pub design_vectors: Vec<Vec<usize>>,
         #[pyo3(get)]
-        pub target_vectors: Vec<f64>,
+        pub target_vectors: Vec<Vec<f64>>,
     }
 
-    /// Formats the sum of two numbers as string.
+    impl From<pareto::ParetoFrontError> for PyErr {
+        fn from(err: pareto::ParetoFrontError) -> Self {
+            PyValueError::new_err(err.to_string())
+        }
+    }
+
+    impl From<pareto::DataTableError> for PyErr {
+        fn from(err: pareto::DataTableError) -> Self {
+            PyValueError::new_err(err.to_string())
+        }
+    }
+
     #[pyfunction]
     fn find_pareto_front(data: Vec<Vec<Vec<f64>>>) -> PyResult<ParetoFrontSolution> {
-        let dd = vec![vec![vec![2.0, 1.0]], vec![vec![-1.4, 2.3]]];
-        let data_table = pareto::DataTable::new(dd);
-        Ok(ParetoFrontSolution {
-            design_vectors: vec![10, 2],
-            target_vectors: vec![0.5],
-        })
+        let data_table = pareto::DataTable::new(&data)?;
+        let pareto_front = pareto::build_pareto_front(&data_table)?;
+        Ok(pareto_front)
     }
 }
