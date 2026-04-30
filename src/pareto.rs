@@ -4,18 +4,22 @@ use crate::pareto_dp::ParetoFrontSolution;
 
 const DELTA: f64 = 1e-9;
 
+type ScenarioVector = Box<[f64]>;
+type StandData = Box<[ScenarioVector]>;
+
 #[derive(Debug, PartialEq)]
 pub struct DataTable {
-    data: Vec<Vec<Vec<f64>>>,
+    data: Box<[StandData]>, // Complete type: Box<[Box<[Box<[f64]>]>]>
 
-    n_stands: usize,         // number of stands in the data
-    n_scenarios: Vec<usize>, // number of scenarios may be different for each stand
-    n_variables: usize,      // number of variables for optimization
+    n_stands: usize,           // number of stands in the data
+    n_scenarios: Box<[usize]>, // number of scenarios may be different for each stand
+    n_variables: usize,        // number of variables for optimization
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum DataTableError {
     Empty,
+    OnlyOneStand,
     InconsistentNumberOfVariables {
         expected: usize,
         got: usize,
@@ -27,6 +31,7 @@ impl std::fmt::Display for DataTableError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Empty => write!(f, "Data table must not have empty entries."),
+            Self::OnlyOneStand => write!(f, "There's only one stand. Nothing to optimize here."),
             Self::InconsistentNumberOfVariables {
                 expected,
                 got,
@@ -45,6 +50,9 @@ impl DataTable {
         // check that the data is not empty
         if data.is_empty() {
             return Err(DataTableError::Empty);
+        }
+        if data.len() < 2 {
+            return Err(DataTableError::OnlyOneStand);
         }
         let expected_n_variables = data
             .first()
@@ -71,11 +79,24 @@ impl DataTable {
                 }
             }
         }
+        // Freeze all three levels: no Vec remains after this point.
+        // Boxes are immutable, like tuples vs lists in Python
+        let data: Box<[StandData]> = data
+            .iter()
+            .map(|scenarios| {
+                scenarios
+                    .iter()
+                    .map(|variables| variables.clone().into_boxed_slice())
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
 
         Ok(Self {
-            data: data.to_owned(),
+            data: data.clone(),
             n_stands: data.len(),
-            n_scenarios: scenarios_cardinality,
+            n_scenarios: scenarios_cardinality.into(),
             n_variables: expected_n_variables,
         })
     }
@@ -85,7 +106,7 @@ impl DataTable {
 #[derive(Clone)]
 struct PartialParetoPoint {
     // # v-dimensional vector in the objective space
-    target_vector: Vec<f64>,
+    target_vector: Box<[f64]>,
     // # Pointer to the parent vector (the i-1 step in the algorithm).
     // # Takes None value for the first stand, which has no parents.
     parent_point: Option<Box<Self>>,
@@ -93,8 +114,6 @@ struct PartialParetoPoint {
     // # The design space vector of the current point can be recovered
     // # by attaching this choice number to the parent point.
     current_scenario_choice: usize,
-    // # step in the algorithm, a.k.a. i. Storing just in case.
-    stand_index: usize,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -129,7 +148,6 @@ fn get_first_stand_scenarios(
             target_vector: item.clone(),
             parent_point: None,
             current_scenario_choice: index,
-            stand_index: 0,
         })
         .collect();
     Ok(pareto_front)
@@ -139,15 +157,15 @@ fn add_vectors(a: &[f64], b: &[f64]) -> Vec<f64> {
     a.iter().zip(b.iter()).map(|(x, y)| x + y).collect()
 }
 
-fn assign_bucket_to_point(point: &PartialParetoPoint, epsilon: f64) -> Vec<usize> {
+fn assign_bucket_to_vector(vector: &[f64], epsilon: f64) -> Vec<usize> {
     /*
-    Assign a point to a bucket in the coarse-grained space.
+    Assign vector to a bucket in the coarse-grained space.
 
     A bucket is the v-dimensional pixel where the Pareto point falls
     when the space is coarse-grained using logarithmic binning.
 
     Args:
-        point: The Pareto point to assign to a bucket
+        vector: The objective vector of the Pareto point
         epsilon: The binning parameter controlling bucket size
 
     Returns:
@@ -157,8 +175,7 @@ fn assign_bucket_to_point(point: &PartialParetoPoint, epsilon: f64) -> Vec<usize
     // ln_1p(x) computes ln(1+x)
     let base = epsilon.ln_1p();
 
-    point
-        .target_vector
+    vector
         .iter()
         .map(
             #[allow(
@@ -178,23 +195,23 @@ fn assign_bucket_to_point(point: &PartialParetoPoint, epsilon: f64) -> Vec<usize
         .collect::<Vec<usize>>()
 }
 
-fn dominates(p: &PartialParetoPoint, q: &PartialParetoPoint) -> bool {
-    p.target_vector
+fn dominates(target_vector_p: &[f64], target_vector_q: &[f64]) -> bool {
+    target_vector_p
         .iter()
-        .zip(q.target_vector.iter())
+        .zip(target_vector_q.iter())
         .all(|(p_k, q_k)| p_k <= q_k)
-        && p.target_vector
+        && target_vector_p
             .iter()
-            .zip(q.target_vector.iter())
+            .zip(target_vector_q.iter())
             .any(|(p_k, q_k)| p_k < q_k)
 }
 
 fn compress_into_buckets(points: Vec<PartialParetoPoint>, epsilon: f64) -> Vec<PartialParetoPoint> {
     let mut buckets: HashMap<Vec<usize>, PartialParetoPoint> = HashMap::new();
     for point in points {
-        let bucket_key = assign_bucket_to_point(&point, epsilon);
+        let bucket_key = assign_bucket_to_vector(&point.target_vector, epsilon);
         match buckets.get(&bucket_key) {
-            Some(existing) if dominates(&point, existing) => {
+            Some(existing) if dominates(&point.target_vector, &existing.target_vector) => {
                 buckets.insert(bucket_key, point);
             }
             None => {
@@ -211,12 +228,15 @@ fn pareto_prune(points: Vec<PartialParetoPoint>) -> Vec<PartialParetoPoint> {
 
     for point in points {
         // If any existing pareto front point dominates `point`, discard it entirely
-        if pareto.iter().any(|q| dominates(q, &point)) {
+        if pareto
+            .iter()
+            .any(|q: &PartialParetoPoint| dominates(&q.target_vector, &point.target_vector))
+        {
             continue;
         }
 
         // Otherwise, remove all points that `point` dominates, then add it
-        pareto.retain(|q| !dominates(&point, q));
+        pareto.retain(|q: &PartialParetoPoint| !dominates(&point.target_vector, &q.target_vector));
         pareto.push(point);
     }
     pareto
@@ -226,8 +246,57 @@ fn pareto_epsilon_prune(points: Vec<PartialParetoPoint>, epsilon: f64) -> Vec<Pa
     pareto_prune(compress_into_buckets(points, epsilon))
 }
 
+fn recover_scenario_choices(point: &PartialParetoPoint) -> Vec<usize> {
+    let mut choices = Vec::new();
+    let mut current = point;
+
+    loop {
+        choices.push(current.current_scenario_choice);
+        match &current.parent_point {
+            Some(parent) => current = parent,
+            None => break,
+        }
+    }
+
+    choices.reverse();
+    choices
+}
+
+/// Indexing is safe because `DataTable::new()` validates that all stands and
+/// scenarios exist and have consistent dimensions, and `design_vector.len() ==
+/// data_table.n_stands` is checked by the assert below.
+#[allow(clippy::indexing_slicing)]
+fn compute_objective(design_vector: &[usize], data_table: &DataTable) -> Vec<f64> {
+    assert_eq!(design_vector.len(), data_table.n_stands);
+    let mut objective: Vec<f64> = vec![0.0; data_table.n_variables];
+    for (stand_ix, scenario_ix) in design_vector.iter().enumerate() {
+        objective = add_vectors(&objective, &data_table.data[stand_ix][*scenario_ix]);
+    }
+    objective
+}
+
+fn reconstruct_solution_pareto_front(
+    pareto_front: Vec<PartialParetoPoint>,
+    data_table: &DataTable,
+) -> Vec<ParetoFrontSolution> {
+    //- Recovers scenario choices from nested structure
+    //- Shifts the target vectors back from positive space
+    //
+    let mut solution = vec![];
+    for point in pareto_front {
+        let design_vector = recover_scenario_choices(&point);
+        solution.push(ParetoFrontSolution {
+            design_vector: design_vector.clone(),
+            target_vector: compute_objective(&design_vector, data_table),
+        });
+    }
+    solution
+}
+
 #[allow(clippy::unnecessary_wraps)]
-pub fn build_pareto_front(data_table: &DataTable) -> Result<ParetoFrontSolution, ParetoFrontError> {
+pub fn build_pareto_front(
+    data_table: &DataTable,
+) -> Result<Vec<ParetoFrontSolution>, ParetoFrontError> {
     let mut pareto_front = get_first_stand_scenarios(data_table)?;
 
     // Remove stand 0 from loop: already considered in the initialization
@@ -235,25 +304,20 @@ pub fn build_pareto_front(data_table: &DataTable) -> Result<ParetoFrontSolution,
     for stand_ix in 1..data_table.n_stands {
         let mut pareto_front_new: Vec<PartialParetoPoint> = vec![];
         for pareto_point in &pareto_front {
-            for (scenario_ix, scenario_data) in data_table.data[stand_ix].iter().enumerate() {
-                let new_target_vector = add_vectors(&pareto_point.target_vector, scenario_data);
+            for (scenario_ix, scenario_vector) in data_table.data[stand_ix].iter().enumerate() {
+                let new_target_vector = add_vectors(&pareto_point.target_vector, scenario_vector);
 
                 pareto_front_new.push(PartialParetoPoint {
-                    target_vector: new_target_vector,
+                    target_vector: new_target_vector.into(),
                     parent_point: Some(Box::new((*pareto_point).clone())),
                     current_scenario_choice: scenario_ix,
-                    stand_index: stand_ix,
                 });
             }
         }
         pareto_front = pareto_epsilon_prune(pareto_front_new, 1e-7);
     }
 
-    // TODO: continue here!
-    Ok(ParetoFrontSolution {
-        design_vectors: vec![vec![10, 2]],
-        target_vectors: vec![vec![0.5]],
-    })
+    Ok(reconstruct_solution_pareto_front(pareto_front, data_table))
 }
 
 #[cfg(test)]
@@ -296,10 +360,17 @@ mod tests {
         assert_eq!(
             DataTable::new(&data),
             Ok(DataTable {
-                data,
+                data: vec![
+                    vec![
+                        vec![2.0, 1.0, 4.3].into_boxed_slice(),
+                        vec![2.3, 3.4, 4.5].into_boxed_slice(),
+                    ]
+                    .into_boxed_slice()
+                ]
+                .into_boxed_slice(),
                 n_stands: 1,
-                n_scenarios: vec![2],
-                n_variables: 3
+                n_scenarios: vec![2].into_boxed_slice(),
+                n_variables: 3,
             })
         );
     }

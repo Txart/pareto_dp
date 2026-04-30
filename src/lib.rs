@@ -12,9 +12,9 @@ mod pareto_dp {
     #[pyclass]
     pub struct ParetoFrontSolution {
         #[pyo3(get)]
-        pub design_vectors: Vec<Vec<usize>>,
+        pub design_vector: Vec<usize>,
         #[pyo3(get)]
-        pub target_vectors: Vec<Vec<f64>>,
+        pub target_vector: Vec<f64>,
     }
 
     impl From<pareto::ParetoFrontError> for PyErr {
@@ -30,9 +30,8 @@ mod pareto_dp {
     }
 
     #[pyfunction]
-    fn find_pareto_front(data: Vec<Vec<Vec<f64>>>) -> PyResult<ParetoFrontSolution> {
+    fn find_pareto_front(data: Vec<Vec<Vec<f64>>>) -> PyResult<Vec<ParetoFrontSolution>> {
         let data_table = pareto::DataTable::new(&data)?;
-        let pareto_front = pareto::build_pareto_front(&data_table)?;
-        Ok(pareto_front)
+        Ok(pareto::build_pareto_front(&data_table)?)
     }
 }
