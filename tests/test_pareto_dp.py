@@ -2,6 +2,8 @@ import unittest
 
 import pareto_dp
 
+EPSILON = 0.001
+
 
 def dominates(a, b):
     """Check if target vector a dominates b (minimization)."""
@@ -13,11 +15,11 @@ def dominates(a, b):
 class TestFindParetoFrontErrors(unittest.TestCase):
     def test_empty_data(self):
         with self.assertRaises(ValueError):
-            pareto_dp.find_pareto_front(data=[])
+            pareto_dp.find_pareto_front(data=[], epsilon=EPSILON)
 
     def test_single_stand(self):
         with self.assertRaises(ValueError):
-            pareto_dp.find_pareto_front(data=[[[1.0, 2.0]]])
+            pareto_dp.find_pareto_front(data=[[[1.0, 2.0]]], epsilon=EPSILON)
 
     def test_inconsistent_variable_lengths(self):
         with self.assertRaises(ValueError):
@@ -25,7 +27,8 @@ class TestFindParetoFrontErrors(unittest.TestCase):
                 data=[
                     [[1.0, 2.0, 3.0]],
                     [[4.0, 5.0]],
-                ]
+                ],
+                epsilon=EPSILON,
             )
 
     def test_empty_inner_vector(self):
@@ -34,7 +37,8 @@ class TestFindParetoFrontErrors(unittest.TestCase):
                 data=[
                     [[1.0, 2.0], []],
                     [[3.0, 4.0]],
-                ]
+                ],
+                epsilon=EPSILON,
             )
 
     def test_empty_scenario_in_second_stand(self):
@@ -43,7 +47,8 @@ class TestFindParetoFrontErrors(unittest.TestCase):
                 data=[
                     [[1.0, 2.0]],
                     [[3.0, 4.0], []],
-                ]
+                ],
+                epsilon=EPSILON,
             )
 
 
@@ -53,7 +58,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[3.0, 2.1], [2.0, 1.0]],
             [[1.0, 1.0], [2.0, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertGreater(len(results), 0)
 
     def test_design_vector_length_equals_stands(self):
@@ -61,7 +66,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[3.0, 2.1], [2.0, 1.0]],
             [[1.0, 1.0], [2.0, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertEqual(len(result.design_vector), 2)
 
@@ -70,7 +75,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[3.0, 2.1], [2.0, 1.0]],
             [[1.0, 1.0], [2.0, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertEqual(len(result.target_vector), 2)
 
@@ -79,7 +84,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[3.0, 2.1], [2.0, 1.0]],
             [[1.0, 1.0], [2.0, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             expected = [
                 data[0][result.design_vector[0]][i]
@@ -94,7 +99,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[1.0, 2.0]],
             [[3.0, 4.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].design_vector, [0, 0])
         self.assertAlmostEqual(results[0].target_vector[0], 4.0)
@@ -106,7 +111,7 @@ class TestFindParetoFrontBasicFunctionality(unittest.TestCase):
             [[0.5, 1.0], [2.0, 0.5]],
             [[1.0, 0.5], [0.5, 1.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertGreater(len(results), 0)
         for result in results:
             self.assertEqual(len(result.design_vector), 3)
@@ -132,7 +137,7 @@ class TestFindParetoFrontParetoOptimality(unittest.TestCase, ParetoFrontTestMixi
             [[3.0, 2.1], [2.0, 1.0]],
             [[1.0, 1.0], [2.0, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assert_pareto_front_is_valid(results)
 
     def test_no_dominance_among_results_3d(self):
@@ -140,7 +145,7 @@ class TestFindParetoFrontParetoOptimality(unittest.TestCase, ParetoFrontTestMixi
             [[1.0, 2.0, 3.0], [3.0, 1.0, 2.0]],
             [[0.5, 1.0, 1.5], [2.0, 0.5, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assert_pareto_front_is_valid(results)
 
     def test_scratch_py_data(self):
@@ -148,14 +153,14 @@ class TestFindParetoFrontParetoOptimality(unittest.TestCase, ParetoFrontTestMixi
             [[3.0, 2.1], [2.0, 1.0]],
         ]
         with self.assertRaises(ValueError):
-            pareto_dp.find_pareto_front(data=data)
+            pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
 
     def test_all_scenarios_identical(self):
         data = [
             [[1.0, 1.0], [1.0, 1.0]],
             [[2.0, 2.0], [2.0, 2.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertGreater(len(results), 0)
         self.assert_pareto_front_is_valid(results)
 
@@ -167,7 +172,7 @@ class TestFindParetoFrontEdgeCases(unittest.TestCase, ParetoFrontTestMixin):
             [[0.5, 0.5], [1.0, 0.3]],
             [[0.3, 1.0], [1.0, 0.3], [0.5, 0.5]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertGreater(len(results), 0)
         for result in results:
             self.assertEqual(len(result.design_vector), 3)
@@ -178,7 +183,7 @@ class TestFindParetoFrontEdgeCases(unittest.TestCase, ParetoFrontTestMixin):
             [[5.0, 5.0], [1.0, 1.0]],
             [[1.0, 1.0], [10.0, 10.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assert_pareto_front_is_valid(results)
 
     def test_design_vector_values_in_range(self):
@@ -186,7 +191,7 @@ class TestFindParetoFrontEdgeCases(unittest.TestCase, ParetoFrontTestMixin):
             [[1.0, 2.0], [2.0, 1.0], [3.0, 3.0]],
             [[0.5, 0.5], [1.0, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertIn(result.design_vector[0], [0, 1, 2])
             self.assertIn(result.design_vector[1], [0, 1])
@@ -198,7 +203,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 2.0], [2.0, 1.0]],
             [[0.5, 0.5], [1.0, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertTrue(hasattr(result, "design_vector"))
             self.assertIsInstance(result.design_vector, list)
@@ -208,7 +213,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 2.0], [2.0, 1.0]],
             [[0.5, 0.5], [1.0, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertTrue(hasattr(result, "target_vector"))
             self.assertIsInstance(result.target_vector, list)
@@ -218,7 +223,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 2.0], [2.0, 1.0]],
             [[0.5, 0.5], [1.0, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             for val in result.design_vector:
                 self.assertIsInstance(val, int)
@@ -228,7 +233,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 2.0], [2.0, 1.0]],
             [[0.5, 0.5], [1.0, 1.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             for val in result.target_vector:
                 self.assertIsInstance(val, float)
@@ -239,7 +244,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[5.0, 5.0], [1.0, 1.0]],
             [[1.0, 1.0], [10.0, 10.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].design_vector, [1, 0])
         self.assertAlmostEqual(results[0].target_vector[0], 2.0)
@@ -251,7 +256,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 5.0], [5.0, 1.0]],
             [[1.0, 1.0], [10.0, 10.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         design_vectors = sorted(r.design_vector for r in results)
         self.assertEqual(len(results), 2)
         self.assertEqual(design_vectors, [[0, 0], [1, 0]])
@@ -266,7 +271,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 1.0], [5.0, 5.0]],
             [[1.0, 1.0], [5.0, 5.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         self.assertEqual(len(results), 1)
         self.assertEqual(results[0].design_vector, [0, 0, 0])
         self.assertAlmostEqual(results[0].target_vector[0], 3.0)
@@ -279,7 +284,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[2.0, 3.0], [3.0, 2.0]],
             [[1.0, 1.0], [10.0, 10.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         design_vectors = sorted(r.design_vector for r in results)
         self.assertEqual(len(results), 4)
         self.assertEqual(design_vectors, [[0, 0, 0], [0, 1, 0], [1, 0, 0], [1, 1, 0]])
@@ -297,7 +302,7 @@ class TestFindParetoFrontResultStructure(unittest.TestCase):
             [[1.0, 4.0], [4.0, 1.0]],
             [[1.0, 1.0], [100.0, 100.0]],
         ]
-        results = pareto_dp.find_pareto_front(data=data)
+        results = pareto_dp.find_pareto_front(data=data, epsilon=EPSILON)
         for result in results:
             self.assertEqual(result.design_vector[3], 0)
             self.assertNotEqual(result.design_vector[3], 1)

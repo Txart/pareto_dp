@@ -46,7 +46,7 @@ impl std::fmt::Display for DataTableError {
 }
 
 impl DataTable {
-    pub fn new(data: &[Vec<Vec<f64>>]) -> Result<Self, DataTableError> {
+    pub fn new(data: Vec<Vec<Vec<f64>>>) -> Result<Self, DataTableError> {
         // check that the data is not empty
         if data.is_empty() {
             return Err(DataTableError::Empty);
@@ -82,27 +82,28 @@ impl DataTable {
         // Freeze all three levels: no Vec remains after this point.
         // Boxes are immutable, like tuples vs lists in Python
         let data: Box<[StandData]> = data
-            .iter()
+            .into_iter()
             .map(|scenarios| {
                 scenarios
-                    .iter()
-                    .map(|variables| variables.clone().into_boxed_slice())
+                    .into_iter()
+                    .map(std::vec::Vec::into_boxed_slice)
                     .collect::<Vec<_>>()
                     .into_boxed_slice()
             })
             .collect::<Vec<_>>()
             .into_boxed_slice();
 
+        let n_stands = data.len();
+
         Ok(Self {
-            data: data.clone(),
-            n_stands: data.len(),
+            data,
+            n_stands,
             n_scenarios: scenarios_cardinality.into(),
             n_variables: expected_n_variables,
         })
     }
 }
 
-// Info about partial pareto fronts considered in the algorithm.
 #[derive(Clone)]
 struct PartialParetoPoint {
     // # v-dimensional vector in the objective space
@@ -116,32 +117,8 @@ struct PartialParetoPoint {
     current_scenario_choice: usize,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub enum ParetoFrontError {
-    EmptyInput,
-    NoParetoPointsFound,
-}
-
-impl std::fmt::Display for ParetoFrontError {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::EmptyInput => write!(f, "Cannot build Pareto front: empty input data."),
-            Self::NoParetoPointsFound => write!(f, "No Pareto points found in the data."),
-        }
-    }
-}
-
-fn get_first_stand_scenarios(
-    data_table: &DataTable,
-) -> Result<Vec<PartialParetoPoint>, ParetoFrontError> {
-    // Initializes the partial Pareto  fronts with
-    // the scenarios in the first stand
-    let first_stand_vectors = data_table
-        .data
-        .first()
-        .ok_or(ParetoFrontError::EmptyInput)?;
-
-    let pareto_front: Vec<PartialParetoPoint> = first_stand_vectors
+fn get_first_stand_scenarios(first_stand: &StandData) -> Vec<PartialParetoPoint> {
+    first_stand
         .iter()
         .enumerate()
         .map(|(index, item)| PartialParetoPoint {
@@ -149,8 +126,7 @@ fn get_first_stand_scenarios(
             parent_point: None,
             current_scenario_choice: index,
         })
-        .collect();
-    Ok(pareto_front)
+        .collect()
 }
 fn add_vectors(a: &[f64], b: &[f64]) -> Vec<f64> {
     assert_eq!(a.len(), b.len(), "Vectors must be the same length");
@@ -184,7 +160,7 @@ fn assign_bucket_to_vector(vector: &[f64], epsilon: f64) -> Vec<usize> {
                 clippy::as_conversions
             )]
             |&coord| {
-                let val = ((coord + DELTA).ln() / base).floor();
+                let val = ((coord + DELTA).ln_1p() / base).floor();
                 assert!(
                     val.is_finite() && val >= 0.0,
                     "negative coordinate value: {val}"
@@ -285,19 +261,18 @@ fn reconstruct_solution_pareto_front(
     let mut solution = vec![];
     for point in pareto_front {
         let design_vector = recover_scenario_choices(&point);
+        let target_vector = compute_objective(&design_vector, data_table);
         solution.push(ParetoFrontSolution {
-            design_vector: design_vector.clone(),
-            target_vector: compute_objective(&design_vector, data_table),
+            design_vector,
+            target_vector,
         });
     }
     solution
 }
 
-#[allow(clippy::unnecessary_wraps)]
-pub fn build_pareto_front(
-    data_table: &DataTable,
-) -> Result<Vec<ParetoFrontSolution>, ParetoFrontError> {
-    let mut pareto_front = get_first_stand_scenarios(data_table)?;
+#[allow(clippy::indexing_slicing)]
+pub fn build_pareto_front(data_table: &DataTable, epsilon: f64) -> Vec<ParetoFrontSolution> {
+    let mut pareto_front = get_first_stand_scenarios(&data_table.data[0]);
 
     // Remove stand 0 from loop: already considered in the initialization
     #[allow(clippy::indexing_slicing)]
@@ -314,10 +289,10 @@ pub fn build_pareto_front(
                 });
             }
         }
-        pareto_front = pareto_epsilon_prune(pareto_front_new, 1e-7);
+        pareto_front = pareto_epsilon_prune(pareto_front_new, epsilon);
     }
 
-    Ok(reconstruct_solution_pareto_front(pareto_front, data_table))
+    reconstruct_solution_pareto_front(pareto_front, data_table)
 }
 
 #[cfg(test)]
@@ -327,13 +302,13 @@ mod tests {
 
     #[test]
     fn test_empty_data_error() {
-        let empty_data = DataTable::new(&[vec![vec![]]]);
+        let empty_data = DataTable::new(vec![vec![vec![]], vec![vec![1.0]]]);
         assert_eq!(empty_data, Err(DataTableError::Empty));
     }
 
     #[test]
     fn test_some_empty_value_error() {
-        let data_without_one_value = &[vec![vec![-1.4, 2.3], vec![]]];
+        let data_without_one_value = vec![vec![vec![-1.4, 2.3], vec![]], vec![vec![1.0, 2.0]]];
         assert_eq!(
             DataTable::new(data_without_one_value),
             Err(DataTableError::Empty)
@@ -342,7 +317,10 @@ mod tests {
 
     #[test]
     fn test_inconsistent_number_of_variables_error() {
-        let inconsistent_vars = &[vec![vec![2.0, 1.0, 4.3], vec![2.3, 3.4, 4.5, 1.2]]];
+        let inconsistent_vars = vec![
+            vec![vec![2.0, 1.0, 4.3], vec![2.3, 3.4, 4.5, 1.2]],
+            vec![vec![1.0, 2.0, 3.0]],
+        ];
         assert_eq!(
             DataTable::new(inconsistent_vars),
             Err(DataTableError::InconsistentNumberOfVariables {
@@ -350,27 +328,6 @@ mod tests {
                 got: 4,
                 stand_index: 0,
                 scenario_index: 1
-            })
-        );
-    }
-
-    #[test]
-    fn test_correct_data_creation() {
-        let data = vec![vec![vec![2.0, 1.0, 4.3], vec![2.3, 3.4, 4.5]]];
-        assert_eq!(
-            DataTable::new(&data),
-            Ok(DataTable {
-                data: vec![
-                    vec![
-                        vec![2.0, 1.0, 4.3].into_boxed_slice(),
-                        vec![2.3, 3.4, 4.5].into_boxed_slice(),
-                    ]
-                    .into_boxed_slice()
-                ]
-                .into_boxed_slice(),
-                n_stands: 1,
-                n_scenarios: vec![2].into_boxed_slice(),
-                n_variables: 3,
             })
         );
     }
