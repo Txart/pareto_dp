@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use crate::pareto_dp::ParetoFrontSolution;
 
@@ -104,27 +105,28 @@ impl DataTable {
     }
 }
 
-#[derive(Clone)]
 struct PartialParetoPoint {
     // # v-dimensional vector in the objective space
     target_vector: Box<[f64]>,
     // # Pointer to the parent vector (the i-1 step in the algorithm).
     // # Takes None value for the first stand, which has no parents.
-    parent_point: Option<Box<Self>>,
+    parent_point: Option<Rc<Self>>,
     // # scenario choice for the ith step in the algorithm.
     // # The design space vector of the current point can be recovered
     // # by attaching this choice number to the parent point.
     current_scenario_choice: usize,
 }
 
-fn get_first_stand_scenarios(first_stand: &StandData) -> Vec<PartialParetoPoint> {
+fn get_first_stand_scenarios(first_stand: &StandData) -> Vec<Rc<PartialParetoPoint>> {
     first_stand
         .iter()
         .enumerate()
-        .map(|(index, item)| PartialParetoPoint {
-            target_vector: item.clone(),
-            parent_point: None,
-            current_scenario_choice: index,
+        .map(|(index, item)| {
+            Rc::new(PartialParetoPoint {
+                target_vector: item.clone(),
+                parent_point: None,
+                current_scenario_choice: index,
+            })
         })
         .collect()
 }
@@ -182,8 +184,8 @@ fn dominates(target_vector_p: &[f64], target_vector_q: &[f64]) -> bool {
             .any(|(p_k, q_k)| p_k < q_k)
 }
 
-fn compress_into_buckets(points: Vec<PartialParetoPoint>, epsilon: f64) -> Vec<PartialParetoPoint> {
-    let mut buckets: HashMap<Vec<usize>, PartialParetoPoint> = HashMap::new();
+fn compress_into_buckets(points: Vec<Rc<PartialParetoPoint>>, epsilon: f64) -> Vec<Rc<PartialParetoPoint>> {
+    let mut buckets: HashMap<Vec<usize>, Rc<PartialParetoPoint>> = HashMap::new();
     for point in points {
         let bucket_key = assign_bucket_to_vector(&point.target_vector, epsilon);
         match buckets.get(&bucket_key) {
@@ -199,32 +201,32 @@ fn compress_into_buckets(points: Vec<PartialParetoPoint>, epsilon: f64) -> Vec<P
     buckets.values().cloned().collect()
 }
 
-fn pareto_prune(points: Vec<PartialParetoPoint>) -> Vec<PartialParetoPoint> {
+fn pareto_prune(points: Vec<Rc<PartialParetoPoint>>) -> Vec<Rc<PartialParetoPoint>> {
     let mut pareto = vec![];
 
     for point in points {
         // If any existing pareto front point dominates `point`, discard it entirely
         if pareto
             .iter()
-            .any(|q: &PartialParetoPoint| dominates(&q.target_vector, &point.target_vector))
+            .any(|q: &Rc<PartialParetoPoint>| dominates(&q.target_vector, &point.target_vector))
         {
             continue;
         }
 
         // Otherwise, remove all points that `point` dominates, then add it
-        pareto.retain(|q: &PartialParetoPoint| !dominates(&point.target_vector, &q.target_vector));
+        pareto.retain(|q: &Rc<PartialParetoPoint>| !dominates(&point.target_vector, &q.target_vector));
         pareto.push(point);
     }
     pareto
 }
 
-fn pareto_epsilon_prune(points: Vec<PartialParetoPoint>, epsilon: f64) -> Vec<PartialParetoPoint> {
+fn pareto_epsilon_prune(points: Vec<Rc<PartialParetoPoint>>, epsilon: f64) -> Vec<Rc<PartialParetoPoint>> {
     pareto_prune(compress_into_buckets(points, epsilon))
 }
 
-fn recover_scenario_choices(point: &PartialParetoPoint) -> Vec<usize> {
+fn recover_scenario_choices(point: &Rc<PartialParetoPoint>) -> Vec<usize> {
     let mut choices = Vec::new();
-    let mut current = point;
+    let mut current: &Rc<PartialParetoPoint> = point;
 
     loop {
         choices.push(current.current_scenario_choice);
@@ -252,7 +254,7 @@ fn compute_objective(design_vector: &[usize], data_table: &DataTable) -> Vec<f64
 }
 
 fn reconstruct_solution_pareto_front(
-    pareto_front: Vec<PartialParetoPoint>,
+    pareto_front: Vec<Rc<PartialParetoPoint>>,
     data_table: &DataTable,
 ) -> Vec<ParetoFrontSolution> {
     //- Recovers scenario choices from nested structure
@@ -277,16 +279,16 @@ pub fn build_pareto_front(data_table: &DataTable, epsilon: f64) -> Vec<ParetoFro
     // Remove stand 0 from loop: already considered in the initialization
     #[allow(clippy::indexing_slicing)]
     for stand_ix in 1..data_table.n_stands {
-        let mut pareto_front_new: Vec<PartialParetoPoint> = vec![];
+        let mut pareto_front_new: Vec<Rc<PartialParetoPoint>> = vec![];
         for pareto_point in &pareto_front {
             for (scenario_ix, scenario_vector) in data_table.data[stand_ix].iter().enumerate() {
                 let new_target_vector = add_vectors(&pareto_point.target_vector, scenario_vector);
 
-                pareto_front_new.push(PartialParetoPoint {
+                pareto_front_new.push(Rc::new(PartialParetoPoint {
                     target_vector: new_target_vector.into(),
-                    parent_point: Some(Box::new((*pareto_point).clone())),
+                    parent_point: Some(Rc::clone(pareto_point)),
                     current_scenario_choice: scenario_ix,
-                });
+                }));
             }
         }
         pareto_front = pareto_epsilon_prune(pareto_front_new, epsilon);
