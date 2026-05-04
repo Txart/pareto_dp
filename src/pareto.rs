@@ -103,6 +103,54 @@ impl DataTable {
             n_variables: expected_n_variables,
         })
     }
+
+    fn get_minimum_values_per_variable(&self) -> Vec<f64> {
+        let mut minima = vec![f64::INFINITY; self.n_variables];
+        for stand in &self.data {
+            for scenario in stand {
+                for (min, &val) in minima.iter_mut().zip(scenario) {
+                    if val < *min {
+                        *min = val;
+                    }
+                }
+            }
+        }
+        minima
+    }
+
+    pub fn shift_to_positive_values(&self) -> Self {
+        // Do a translation of the coordinate system so that all values of the variables are positive.
+        // To simplify the implementation, all dimensions are shifted,
+        // irrespective of whether they contain negative values or not.
+        let minimum_values_per_variable = self.get_minimum_values_per_variable();
+
+        let data: Box<[StandData]> = self
+            .data
+            .iter()
+            .map(|stand| {
+                stand
+                    .iter()
+                    .map(|scenario| {
+                        scenario
+                            .iter()
+                            .zip(minimum_values_per_variable.iter())
+                            .map(|(val, &min_val)| val - min_val + DELTA)
+                            .collect::<Vec<f64>>()
+                            .into_boxed_slice()
+                    })
+                    .collect::<Vec<_>>()
+                    .into_boxed_slice()
+            })
+            .collect::<Vec<_>>()
+            .into_boxed_slice();
+
+        Self {
+            data,
+            n_stands: self.n_stands,
+            n_scenarios: self.n_scenarios.clone(),
+            n_variables: self.n_variables,
+        }
+    }
 }
 
 struct PartialParetoPoint {
@@ -184,7 +232,10 @@ fn dominates(target_vector_p: &[f64], target_vector_q: &[f64]) -> bool {
             .any(|(p_k, q_k)| p_k < q_k)
 }
 
-fn compress_into_buckets(points: Vec<Rc<PartialParetoPoint>>, epsilon: f64) -> Vec<Rc<PartialParetoPoint>> {
+fn compress_into_buckets(
+    points: Vec<Rc<PartialParetoPoint>>,
+    epsilon: f64,
+) -> Vec<Rc<PartialParetoPoint>> {
     let mut buckets: HashMap<Vec<usize>, Rc<PartialParetoPoint>> = HashMap::new();
     for point in points {
         let bucket_key = assign_bucket_to_vector(&point.target_vector, epsilon);
@@ -214,13 +265,18 @@ fn pareto_prune(points: Vec<Rc<PartialParetoPoint>>) -> Vec<Rc<PartialParetoPoin
         }
 
         // Otherwise, remove all points that `point` dominates, then add it
-        pareto.retain(|q: &Rc<PartialParetoPoint>| !dominates(&point.target_vector, &q.target_vector));
+        pareto.retain(|q: &Rc<PartialParetoPoint>| {
+            !dominates(&point.target_vector, &q.target_vector)
+        });
         pareto.push(point);
     }
     pareto
 }
 
-fn pareto_epsilon_prune(points: Vec<Rc<PartialParetoPoint>>, epsilon: f64) -> Vec<Rc<PartialParetoPoint>> {
+fn pareto_epsilon_prune(
+    points: Vec<Rc<PartialParetoPoint>>,
+    epsilon: f64,
+) -> Vec<Rc<PartialParetoPoint>> {
     pareto_prune(compress_into_buckets(points, epsilon))
 }
 
@@ -258,8 +314,9 @@ fn reconstruct_solution_pareto_front(
     data_table: &DataTable,
 ) -> Vec<ParetoFrontSolution> {
     //- Recovers scenario choices from nested structure
-    //- Shifts the target vectors back from positive space
-    //
+    //- Re-computes the target vector for all solutions.
+    //This undos the shift from positive space
+
     let mut solution = vec![];
     for point in pareto_front {
         let design_vector = recover_scenario_choices(&point);
@@ -274,14 +331,18 @@ fn reconstruct_solution_pareto_front(
 
 #[allow(clippy::indexing_slicing)]
 pub fn build_pareto_front(data_table: &DataTable, epsilon: f64) -> Vec<ParetoFrontSolution> {
-    let mut pareto_front = get_first_stand_scenarios(&data_table.data[0]);
+    let positive_data_table = data_table.shift_to_positive_values();
+
+    let mut pareto_front = get_first_stand_scenarios(&positive_data_table.data[0]);
 
     // Remove stand 0 from loop: already considered in the initialization
     #[allow(clippy::indexing_slicing)]
-    for stand_ix in 1..data_table.n_stands {
+    for stand_ix in 1..positive_data_table.n_stands {
         let mut pareto_front_new: Vec<Rc<PartialParetoPoint>> = vec![];
         for pareto_point in &pareto_front {
-            for (scenario_ix, scenario_vector) in data_table.data[stand_ix].iter().enumerate() {
+            for (scenario_ix, scenario_vector) in
+                positive_data_table.data[stand_ix].iter().enumerate()
+            {
                 let new_target_vector = add_vectors(&pareto_point.target_vector, scenario_vector);
 
                 pareto_front_new.push(Rc::new(PartialParetoPoint {
@@ -294,6 +355,7 @@ pub fn build_pareto_front(data_table: &DataTable, epsilon: f64) -> Vec<ParetoFro
         pareto_front = pareto_epsilon_prune(pareto_front_new, epsilon);
     }
 
+    // Gets objective vectors for the original data table, not the positive-shifted one.
     reconstruct_solution_pareto_front(pareto_front, data_table)
 }
 
@@ -332,5 +394,60 @@ mod tests {
                 scenario_index: 1
             })
         );
+    }
+
+    #[test]
+    fn test_minimum_value_per_variable() {
+        let data = DataTable::new(vec![
+            vec![vec![-1.4, 2.3], vec![5.0, 3.0]],
+            vec![vec![1.0, 2.0]],
+        ])
+        .unwrap();
+        assert_eq!(data.get_minimum_values_per_variable(), vec![-1.4, 2.0]);
+    }
+
+    #[test]
+    fn test_shift_points_to_positive_values() {
+        let data = DataTable::new(vec![
+            vec![vec![-1.4, 2.3], vec![5.0, 3.0]],
+            vec![vec![1.0, 2.0]],
+        ])
+        .unwrap();
+        let shifted_actual = data.shift_to_positive_values();
+        // Manual comparison with epsilon due to floating point precision
+        let shifted_expected_data = vec![
+            vec![
+                vec![-1.4 - (-1.4) + DELTA, 2.3 - 2.0 + DELTA],
+                vec![5.0 - (-1.4) + DELTA, 3.0 - 2.0 + DELTA],
+            ],
+            vec![vec![1.0 - (-1.4) + DELTA, 2.0 - 2.0 + DELTA]],
+        ];
+        let shifted_expected = DataTable::new(shifted_expected_data).unwrap();
+        for (i, (stand_actual, stand_expected)) in shifted_actual
+            .data
+            .iter()
+            .zip(shifted_expected.data.iter())
+            .enumerate()
+        {
+            for (j, (scenario_actual, scenario_expected)) in
+                stand_actual.iter().zip(stand_expected.iter()).enumerate()
+            {
+                for (k, (val_actual, val_expected)) in scenario_actual
+                    .iter()
+                    .zip(scenario_expected.iter())
+                    .enumerate()
+                {
+                    assert!(
+                        (val_actual - val_expected).abs() < 1e-12,
+                        "Mismatch at [{}][{}][{}]: {} vs {}",
+                        i,
+                        j,
+                        k,
+                        val_actual,
+                        val_expected
+                    );
+                }
+            }
+        }
     }
 }
