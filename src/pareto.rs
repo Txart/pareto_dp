@@ -154,14 +154,14 @@ impl DataTable {
 }
 
 struct PartialParetoPoint {
-    // # v-dimensional vector in the objective space
+    // v-dimensional vector in the objective space
     target_vector: Box<[f64]>,
-    // # Pointer to the parent vector (the i-1 step in the algorithm).
-    // # Takes None value for the first stand, which has no parents.
+    // Pointer to the parent vector (the i-1 step in the algorithm).
+    // Takes None value for the first stand, which has no parents.
     parent_point: Option<Rc<Self>>,
-    // # scenario choice for the ith step in the algorithm.
-    // # The design space vector of the current point can be recovered
-    // # by attaching this choice number to the parent point.
+    // scenario choice for the ith step in the algorithm.
+    // The design space vector of the current point can be recovered
+    // by attaching this choice number to the parent point.
     current_scenario_choice: usize,
 }
 
