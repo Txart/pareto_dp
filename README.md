@@ -8,6 +8,8 @@ Written in Rust, published as a Python PyPI package with `PyO3` and `maturin`.
 
 This library solves a multi-objective multiple-choice combinatorial optimization problem with **additive separable objectives**, designed for scenarios with precomputed data for independent decision points.
 
+Here's [an introductory blogpost that provides more motivation for the problem](https://iurzainki.com/blog/pareto).
+
 ### Core user-facing properties
 - **Independent groups**: The problem consists of `n` independent groups (e.g., decision stages, components) with no interdependencies.
 - **Additive objective aggregation**: The total objective vector for a configuration is the sum of per-group contributions. For a configuration `x` (one scenario chosen per group), the `v`-dimensional objective is:
@@ -18,10 +20,10 @@ This library solves a multi-objective multiple-choice combinatorial optimization
 - **Precomputed lookup table**: All per-group, per-scenario objective values are precomputed (table-lookup/black-box). The library takes this 3D lookup table as direct input.
 
 ### Formal structure
-- `n` independent groups (typical `n ~ 300`)
-- Each group `i` has `m_i ∈ [3,12]` scenarios (branching options)
+- `n` independent groups
+- Each group `i` has `m_i` scenarios
 - Multiple-choice constraint: A configuration selects exactly one scenario per group
-- `v` objectives (typical `v ~ 6`), precomputed as `a_{i,j} ∈ ℝᵛ`
+- `v` objectives, precomputed as `a_{i,j} ∈ ℝᵛ`
 - Goal: Compute the Pareto-optimal frontier in the `v`-dimensional objective space
 
 ### Scale challenge
