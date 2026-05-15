@@ -92,8 +92,6 @@ jobs:
         platform:
           - runner: windows-latest
             target: x64
-          - runner: windows-latest
-            target: x86
           - runner: windows-11-arm
             target: aarch64
     steps:
