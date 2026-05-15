@@ -25,3 +25,6 @@ classifiers = [
 urls = {Homepage = "https://github.com/Txart/pareto_dp", Repository = "https://github.com/Txart/pareto_dp"}
 readme = "README.md"
 dynamic = ["version"]
+
+[tool.maturin]
+python-source = "python"
