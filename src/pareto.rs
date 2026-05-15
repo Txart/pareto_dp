@@ -359,6 +359,30 @@ pub fn build_pareto_front(data_table: &DataTable, epsilon: f64) -> Vec<ParetoFro
     reconstruct_solution_pareto_front(pareto_front, data_table)
 }
 
+pub fn generate_random_points(data_table: &DataTable, n_points: u32) -> Vec<ParetoFrontSolution> {
+    use rand::Rng;
+    let mut rng = rand::rng();
+    let Ok(n_points_usize) = usize::try_from(n_points) else { return Vec::new() };
+    let mut solutions = Vec::with_capacity(n_points_usize);
+
+    for _ in 0..n_points {
+        let design_vector: Vec<usize> = data_table
+            .n_scenarios
+            .iter()
+            .map(|&n_scenarios| rng.random_range(0..n_scenarios))
+            .collect();
+
+        let target_vector = compute_objective(&design_vector, data_table);
+
+        solutions.push(ParetoFrontSolution {
+            design_vector,
+            target_vector,
+        });
+    }
+
+    solutions
+}
+
 #[cfg(test)]
 mod tests {
     // imports names from outer scope.

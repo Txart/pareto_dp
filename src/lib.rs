@@ -24,8 +24,20 @@ mod pareto_dp {
     }
 
     #[pyfunction]
-    fn find_pareto_front(data: Vec<Vec<Vec<f64>>>, epsilon: f64) -> PyResult<Vec<ParetoFrontSolution>> {
+    pub fn find_pareto_front(
+        data: Vec<Vec<Vec<f64>>>,
+        epsilon: f64,
+    ) -> PyResult<Vec<ParetoFrontSolution>> {
         let data_table = pareto::DataTable::new(data)?;
         Ok(pareto::build_pareto_front(&data_table, epsilon))
+    }
+
+    #[pyfunction]
+    pub fn create_random_points(
+        data: Vec<Vec<Vec<f64>>>,
+        n_points: u32,
+    ) -> PyResult<Vec<ParetoFrontSolution>> {
+        let data_table = pareto::DataTable::new(data)?;
+        Ok(pareto::generate_random_points(&data_table, n_points))
     }
 }
