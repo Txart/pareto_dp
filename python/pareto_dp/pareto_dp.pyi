@@ -1,6 +1,0 @@
-class ParetoFrontSolution:
-    design_vector: list[int]
-    target_vector: list[float]
-    def __init__(self) -> None: ...
-
-def find_pareto_front(data: list[list[list[float]]], epsilon: float) -> list[ParetoFrontSolution]: ...
