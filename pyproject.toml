@@ -5,7 +5,7 @@ build-backend = "maturin"
 [project]
 name = "pareto_dp"
 description = "Multi-objective optimization using dynamic programming to find Pareto-optimal solutions"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 authors = [{ name = "txart" }]
 license = { text = "MIT" }
 keywords = ["optimization", "pareto", "multi-objective", "dynamic-programming"]
@@ -25,7 +25,28 @@ readme = "README.md"
 dynamic = ["version"]
 dependencies = []
 [dependency-groups]
-dev = ["ruff>=0.15.13", "ty>=0.0.35"]
+dev = [
+    "pytest>=8.4.2",
+    "ruff>=0.15.13",
+    "ty>=0.0.35",
+]
 
 [tool.maturin]
 python-source = "python"
+
+# Settings for `maturin generate-ci github`. Regenerate CI.yml with:
+#   uvx maturin generate-ci github -o .github/workflows/CI.yml
+[tool.maturin.generate-ci.github]
+pytest = true
+
+[tool.maturin.generate-ci.github.linux]
+targets = ["x86_64", "x86", "aarch64", "armv7", "s390x", "ppc64le"]
+
+[tool.maturin.generate-ci.github.musllinux]
+targets = ["x86_64", "x86", "aarch64", "armv7"]
+
+[tool.maturin.generate-ci.github.windows]
+targets = ["x64", "aarch64"]
+
+[tool.maturin.generate-ci.github.macos]
+targets = ["x86_64", "aarch64"]

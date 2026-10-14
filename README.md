@@ -89,7 +89,7 @@ The algorithm uses dynamic programming to efficiently find the Pareto front:
 
 ## Requirements
 
-- Python >= 3.9
+- Python >= 3.11
 - Compatible with CPython and PyPy
 
 ## License
