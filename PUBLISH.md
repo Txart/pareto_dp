@@ -7,8 +7,8 @@
 
 ```bash
 git add Cargo.toml
-git commit -m "bump version to 0.1.3"
-git tag 0.1.3
+git commit -m "bump version to x.x.x"
+git tag x.x.x
 git push origin main --tags
 ```
 
