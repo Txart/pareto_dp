@@ -1,6 +1,6 @@
 [package]
 name = "pareto_dp"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2024"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -13,7 +13,6 @@ pyo3 = { version = "0.28.2", features = ["abi3-py39"] }
 rand = "0.9"
 
 [lints.clippy]
-# UM, ACTUALLY
 pedantic = { level = "deny", priority = -1 }
 # DEVELOPING LINTS
 nursery = { level = "deny", priority = -1 }

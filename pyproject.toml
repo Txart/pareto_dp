@@ -6,10 +6,8 @@ build-backend = "maturin"
 name = "pareto_dp"
 description = "Multi-objective optimization using dynamic programming to find Pareto-optimal solutions"
 requires-python = ">=3.9"
-authors = [
-    {name = "txart"},
-]
-license = {text = "MIT"}
+authors = [{ name = "txart" }]
+license = { text = "MIT" }
 keywords = ["optimization", "pareto", "multi-objective", "dynamic-programming"]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -22,13 +20,12 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Mathematics",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-urls = {Homepage = "https://github.com/Txart/pareto_dp", Repository = "https://github.com/Txart/pareto_dp"}
+urls = { Homepage = "https://github.com/Txart/pareto_dp", Repository = "https://github.com/Txart/pareto_dp" }
 readme = "README.md"
 dynamic = ["version"]
-dependencies = [
-    "ruff>=0.15.13",
-    "ty>=0.0.35",
-]
+dependencies = []
+[dependency-groups]
+dev = ["ruff>=0.15.13", "ty>=0.0.35"]
 
 [tool.maturin]
 python-source = "python"
